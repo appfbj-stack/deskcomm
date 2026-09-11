@@ -1,6 +1,7 @@
 "use client";
 import { AlertsBell } from "./AlertsBell";
 import { MobileSidebar } from "./MobileSidebar";
+import { PlatformAdminButton } from "./PlatformAdminButton";
 import { TenantSwitcher } from "./TenantSwitcher";
 import { UserMenu } from "./UserMenu";
 import { SearchTrigger } from "./SearchTrigger";
@@ -16,6 +17,7 @@ export function TopBar() {
         <SearchTrigger />
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        <PlatformAdminButton />
         <AlertsBell />
         <UserMenu />
       </div>
