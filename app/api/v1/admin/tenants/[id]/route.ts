@@ -38,6 +38,7 @@ export async function GET(
       status,
       onboarded_at,
       suspended_at,
+      trial_ends_at,
       created_at,
       settings
     `,

@@ -79,6 +79,48 @@ function StatCard({ label, value, warning }: { label: string; value: number; war
   );
 }
 
+/**
+ * Badge do trial: cor e rótulo dependem do estado:
+ *  - suspenso > trial vence   → "Suspenso" (neutro — ação já tomada)
+ *  - trial venceu (ativo)     → vermelho "Vencido" (lembrete de suspender)
+ *  - trial vence em ≤ 3 dias  → âmbar "Vence em N dias"
+ *  - trial futuro distante    → neutro "dd/mm/aaaa"
+ *
+ * A semântica é "ação do platform_admin": vermelho = precisa fazer algo agora.
+ */
+function TrialBadge({
+  trialEndsAt,
+  status,
+  formatDate,
+  idioma,
+}: {
+  trialEndsAt: string;
+  status: "active" | "suspended" | "redacted";
+  formatDate: (iso: string | null, idioma: string) => string;
+  idioma: string;
+}) {
+  const t = useT();
+  const trialEnd = new Date(trialEndsAt);
+  const now = new Date();
+  const diffMs = trialEnd.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+
+  let variant: "success" | "warning" | "error" | "neutral" = "neutral";
+  let label: string = formatDate(trialEndsAt, idioma);
+
+  if (status === "suspended") {
+    variant = "neutral";
+  } else if (diffDays < 0) {
+    variant = "error";
+    label = t("Vencido há") + " " + Math.abs(diffDays) + " " + t("dias");
+  } else if (diffDays <= 3) {
+    variant = "warning";
+    label = t("Vence em") + " " + diffDays + " " + t(diffDays === 1 ? "dia" : "dias");
+  }
+
+  return <Badge variant={variant}>{label}</Badge>;
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -121,6 +163,19 @@ export function TenantOverview({ organization, counts, integrations }: TenantOve
           <InfoRow label="CNPJ" value={organization.cnpj} />
           <InfoRow label={t("Onboarding concluído")} value={formatDate(organization.onboarded_at, tagDoIdioma)} />
           <InfoRow label={t("Criado em")} value={formatDate(organization.created_at, tagDoIdioma)} />
+          {organization.trial_ends_at && (
+            <InfoRow
+              label={t("Trial até")}
+              value={
+                <TrialBadge
+                  trialEndsAt={organization.trial_ends_at}
+                  status={organization.status}
+                  formatDate={formatDate}
+                  idioma={tagDoIdioma}
+                />
+              }
+            />
+          )}
           {organization.suspended_at && (
             <InfoRow label={t("Suspenso em")} value={formatDate(organization.suspended_at, tagDoIdioma)} />
           )}

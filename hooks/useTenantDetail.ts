@@ -17,6 +17,9 @@ export interface TenantOrganization {
   status: "active" | "suspended" | "redacted";
   onboarded_at: string | null;
   suspended_at: string | null;
+  /** Data que termina o trial gratuito. Após essa data, platform_admin deve
+   *  suspender manualmente se o cliente não pagou. Nullable até Pastor setar. */
+  trial_ends_at: string | null;
   created_at: string;
   settings: Record<string, unknown> | null;
 }

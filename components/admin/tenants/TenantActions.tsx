@@ -3,8 +3,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SuspendDialog } from "./SuspendDialog";
 import { ReactivateDialog } from "./ReactivateDialog";
+import { QrCodeSignupDialog } from "./QrCodeSignupDialog";
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
 import { useT } from "@/hooks/i18n/useT";
+import { QrCode } from "@/lib/ui/icons";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -28,6 +30,7 @@ export function TenantActions({
   const t = useT();
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [reactivateOpen, setReactivateOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
 
   const canSuspend = status === "active";
   const isSuspended = status === "suspended";
@@ -49,6 +52,22 @@ export function TenantActions({
             isRedacted ? t("Tenant redigido — ação não disponível") : undefined
           }
         />
+
+        {/* Gerar QR / link de signup — pra enviar pro cliente pelo WhatsApp.
+            Funciona em qualquer status: até em `suspended` é útil pra reenviar
+            o link se o cliente perdeu. `redacted` é o único estado terminal
+            onde não faz sentido. */}
+        {!isRedacted && (
+          <Button
+            className="w-full"
+            variant="outline"
+            onClick={() => setQrOpen(true)}
+            aria-label={t("Gerar link de cadastro / QR Code")}
+          >
+            <QrCode size={16} weight="regular" className="mr-2" aria-hidden />
+            {t("Gerar link / QR Code")}
+          </Button>
+        )}
 
         {/* Suspend */}
         {canSuspend && (
@@ -90,6 +109,12 @@ export function TenantActions({
       <ReactivateDialog
         open={reactivateOpen}
         onClose={() => setReactivateOpen(false)}
+        organizationId={organizationId}
+      />
+
+      <QrCodeSignupDialog
+        open={qrOpen}
+        onClose={() => setQrOpen(false)}
         organizationId={organizationId}
       />
     </>
