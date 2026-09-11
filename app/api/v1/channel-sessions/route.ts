@@ -99,6 +99,48 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
   }
 
+  // ─── Limite de instâncias por plano ─────────────────────────────────────
+  //
+  // O platform_admin grava `settings.max_instances` na criação/edição do
+  // tenant. Quando o cliente tenta conectar mais um WhatsApp e já está no
+  // limite, bloqueamos antes de chamar WAHA — assim a sessão remota nunca
+  // fica STARTING abandonada. `null` ou ausente = sem limite (legado).
+  //
+  // A contagem considera sessões ATIVAS (qualquer status, exceto arquivadas)
+  // porque arquivadas são "lixo de FK" e o cliente não usa — ver
+  // lib/channels/archived. Replay de reserva NÃO incrementa: é a MESMA sessão
+  // voltando pra fila, não uma nova.
+  if (parsed.data.display_name !== undefined) {
+    const admin = createAdminClient();
+    const [{ data: org }, { count: used }] = await Promise.all([
+      admin
+        .from("organizations")
+        .select("settings")
+        .eq("id", activeOrg.orgId)
+        .single(),
+      admin
+        .from("channel_sessions")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", activeOrg.orgId)
+        // arquivados não contam (mesma lógica do GET acima)
+        .is(ARCHIVED_AT, null),
+    ]);
+    const maxRaw = (org?.settings as { max_instances?: unknown } | null)?.max_instances;
+    const max = typeof maxRaw === "number" && Number.isFinite(maxRaw) && maxRaw >= 0
+      ? Math.floor(maxRaw)
+      : null;
+    if (max !== null && (used ?? 0) >= max) {
+      return fail(
+        "instance_limit_reached",
+        t(
+          `Limite do plano atingido: este tenant já tem ${used} conexão(ões) de ${max} permitida(s). Peça ao suporte para aumentar o limite.`,
+        ),
+        403,
+        { requestId, details: { used, max } },
+      );
+    }
+  }
+
   try {
     const result = await connectWahaChannel(await createClient(), createAdminClient(), waha, {
       organizationId: activeOrg.orgId, idempotencyKey: req.headers.get("Idempotency-Key") ?? "",

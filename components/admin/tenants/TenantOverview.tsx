@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Warning } from "@/lib/ui/icons";
 import type {
   TenantOrganization,
@@ -9,6 +11,7 @@ import type {
   TenantIntegrations,
 } from "@/hooks/useTenantDetail";
 import { useT } from "@/hooks/i18n/useT";
+import { PlanLimitsDialog } from "./PlanLimitsDialog";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -138,7 +141,28 @@ interface TenantOverviewProps {
 export function TenantOverview({ organization, counts, integrations }: TenantOverviewProps) {
   const tagDoIdioma = useTagDeIdioma();
   const t = useT();
-  const plan = (organization.settings as { plan?: string } | null)?.plan ?? "—";
+  const [planOpen, setPlanOpen] = useState(false);
+  const planSettings = (organization.settings ?? {}) as {
+    plan?: string;
+    plan_name?: string;
+    plan_price_cents?: number;
+    max_instances?: number;
+  };
+  // settings.plan é legado do schema; settings.plan_name é o novo. Mostra o que
+  // tiver — é o Pastor editando, então ele sabe qual setou.
+  const plan =
+    planSettings.plan_name?.trim() ||
+    planSettings.plan ||
+    "—";
+  const planPriceCents = planSettings.plan_price_cents;
+  const maxInstances = planSettings.max_instances;
+  const usedInstances = counts.waha_sessions_count;
+  const instancesDisplay =
+    typeof maxInstances === "number"
+      ? `${usedInstances} / ${maxInstances}`
+      : `${usedInstances} / ∞`;
+  const overLimit =
+    typeof maxInstances === "number" && usedInstances >= maxInstances;
 
   const nuvemshopStatus = integrations.nuvemshop_status;
   // Valor fora do vocabulário conhecido continua aparecendo cru de propósito:
@@ -154,11 +178,53 @@ export function TenantOverview({ organization, counts, integrations }: TenantOve
     <div className="space-y-6">
       {/* Info card */}
       <div className="rounded-lg border bg-card p-5">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          {t("Informações")}
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            {t("Plano & limites")}
+          </h2>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setPlanOpen(true)}
+            aria-label={t("Editar plano")}
+          >
+            {t("Editar")}
+          </Button>
+        </div>
         <div>
-          <InfoRow label={t("Plano")} value={<Badge variant="neutral" className="capitalize">{plan}</Badge>} />
+          <InfoRow
+            label={t("Plano")}
+            value={
+              <Badge variant="neutral" className="capitalize">{plan}</Badge>
+            }
+          />
+          <InfoRow
+            label={t("Preço mensal")}
+            value={
+              typeof planPriceCents === "number"
+                ? new Intl.NumberFormat("pt-BR", {
+                    style: "currency",
+                    currency: "BRL",
+                  }).format(planPriceCents / 100)
+                : "—"
+            }
+          />
+          <InfoRow
+            label={t("Instâncias WhatsApp")}
+            value={
+              <span className={overLimit ? "text-red-600 font-semibold" : ""}>
+                {instancesDisplay}
+                {overLimit && (
+                  <Warning
+                    size={14}
+                    weight="fill"
+                    className="ml-1.5 text-red-500 inline-block"
+                    aria-label={t("Limite atingido")}
+                  />
+                )}
+              </span>
+            }
+          />
           <InfoRow label={t("Razão social")} value={organization.legal_name} />
           <InfoRow label="CNPJ" value={organization.cnpj} />
           <InfoRow label={t("Onboarding concluído")} value={formatDate(organization.onboarded_at, tagDoIdioma)} />
@@ -242,6 +308,17 @@ export function TenantOverview({ organization, counts, integrations }: TenantOve
           </div>
         </div>
       </div>
+
+      <PlanLimitsDialog
+        open={planOpen}
+        onClose={() => setPlanOpen(false)}
+        organizationId={organization.id}
+        current={{
+          plan_name: planSettings.plan_name ?? null,
+          plan_price_cents: planPriceCents ?? null,
+          max_instances: typeof maxInstances === "number" ? maxInstances : null,
+        }}
+      />
     </div>
   );
 }
