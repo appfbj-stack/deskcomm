@@ -15,7 +15,14 @@ import type { Role } from "@/lib/auth/types";
  * Doutrina: docs/doctrine/sistema-vivo.md — "por qual porta se chega até mim?"
  */
 
-export type NavGroupId = "atendimento" | "crm" | "ia" | "canais" | "analise" | "organizacao";
+export type NavGroupId =
+  | "atendimento"
+  | "crm"
+  | "ia"
+  | "canais"
+  | "analise"
+  | "organizacao"
+  | "plataforma";
 
 export interface NavGroup {
   id: NavGroupId;
@@ -43,6 +50,14 @@ export interface NavMetadata {
   /** Ausente = só no hub. `true` = uso diário, sobe para o sidebar. */
   sidebar?: boolean;
   healthDot?: boolean;
+  /**
+   * Só aparece para platform_admins. Usado pelo portal `/admin/*`, que não tem
+   * sentido pra admin/manager/agent do tenant — quem clica sem ser platform_admin
+   * cai em `/forbidden` (gate de `requirePlatformAdmin`). Diferente de `minRole`,
+   * que filtra por papel DENTRO do tenant: aqui o conceito não é papel, é ESCALA
+   * (SaaS inteiro x um cliente só).
+   */
+  platformOnly?: boolean;
 }
 
 /**
@@ -76,6 +91,12 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Organização",
     hub: { href: "/app/settings", label: "Configurações" },
   },
+  // Aparece SÓ pra platform_admins (`platformOnly: true` no item abaixo) — o
+  // tenant nunca vê este grupo. Posicionado depois de "organizacao" porque o
+  // painel administrativo é a ÚLTIMA coisa que o dono do SaaS abre no dia
+  // (depois de configurar tudo dos clientes); colocar antes deslocaria grupos
+  // do tenant que ele abre com frequência.
+  { id: "plataforma", label: "Plataforma" },
 ];
 
 /**
@@ -671,6 +692,23 @@ export const NAV_CATALOG = [
     group: "organizacao",
     section: "Dados e acesso",
     minRole: "admin",
+  },
+
+  // ---- Plataforma — só platform_admin ----
+  {
+    // Portal do SaaS inteiro: KPIs cross-tenant, lista de clientes, auditoria,
+    // impersonate, suspensão. O gate em `app/admin/(protected)/layout.tsx`
+    // chama `requirePlatformAdmin()` e redireciona quem não é. O `platformOnly`
+    // abaixo é o que impede o link de aparecer pra admin/manager do tenant —
+    // sem ele, o item cairia no `canSee` por `minRole` e o admin veria um link
+    // morto.
+    href: "/admin/dashboard",
+    label: "Painel Plataforma",
+    description: "KPIs cross-tenant, lista de clientes, auditoria e impersonate.",
+    icon: "ShieldCheck",
+    group: "plataforma",
+    platformOnly: true,
+    sidebar: true,
   },
 ] as const satisfies readonly NavMetadata[];
 

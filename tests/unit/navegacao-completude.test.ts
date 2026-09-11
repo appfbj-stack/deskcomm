@@ -18,6 +18,12 @@ import { NAV_DESTINATIONS, NAV_GROUPS } from "@/lib/navigation/registry";
  *
  * ESCOPO: só `app/app/**` — a navegação do tenant. O admin de plataforma
  * (`app/admin/`), o onboarding e as páginas públicas têm navegação própria.
+ *
+ * O único destino de `lib/navigation/registry.ts` que aponta pra fora de
+ * `app/app/**` é `/admin/dashboard`, marcado com `platformOnly` — a porta do
+ * portal de plataforma no sidebar do app do tenant. Ele está na allowlist
+ * abaixo; os OUTROS endereços de `app/admin/**` continuam sendo navegados só
+ * por dentro do portal, sem entrada no registro.
  */
 
 const RAIZ = process.cwd();
@@ -42,6 +48,8 @@ const NAV_ALLOWLIST: Record<string, string> = {
     "redirect para /app/connections?aba=oficial&sub=templates — template da Meta só existe por causa do canal oficial, e vive como sub-aba dele",
   "/app/settings/atualizacao":
     "porta é o rodapé de versão (VersionFooter), que aparece justamente quando há versão nova — melhor que um card fixo. Além disso é só do dono do servidor (is_platform_admin), papel que o registro não modela",
+  "/admin/dashboard":
+    "portal de plataforma (`/admin/*`) tem navegação própria dentro do modo plataforma; este destino vive no registro com `platformOnly: true` só pra aparecer no sidebar do app do tenant como atalho pro portal — a árvore `/admin/**` em si não é escopo deste teste",
 };
 
 /** Deriva as rotas estáticas a partir dos arquivos de página que existem. */

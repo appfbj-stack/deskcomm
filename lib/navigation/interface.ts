@@ -40,10 +40,15 @@ export function essencial(d: NavMetadata, role: Role | null, platform = false): 
   );
 }
 export function canSee(
-  d: Pick<NavMetadata, "href" | "minRole">,
+  d: Pick<NavMetadata, "href" | "minRole" | "platformOnly">,
   platform: boolean,
   role: Role | null,
 ): boolean {
+  // Itens `platformOnly` não saem por papel do tenant — é escopo do SaaS, não
+  // permissão funcional. Sem este curto-circuito, um `admin` do tenant veria o
+  // link pro /admin/* e cairia em /forbidden, porque o gate é por
+  // `is_platform_admin` (ver `app/admin/(protected)/layout.tsx`).
+  if (d.platformOnly) return platform;
   return platform || (!!role && ROLE_RANK[role] >= ROLE_RANK[d.minRole ?? "viewer"]);
 }
 export function permitidos(platform: boolean, role: Role | null): NavMetadata[] {
