@@ -65,6 +65,38 @@ function maskCnpj(value: string): string {
   return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
 }
 
+/**
+ * Presets de plano que Pastor pode escolher na criação do tenant. Os valores
+ * viram `settings.plan_name` + `settings.plan_price_cents` + `settings.max_instances`
+ * via PATCH depois do POST (a RPC `fn_create_tenant_with_owner` ainda não
+ * conhece esses campos — ver `hooks/useCreateTenant.ts`).
+ *
+ * "custom" não tem números: Pastor edita depois no detalhe do tenant pelo
+ * dialog "Editar plano".
+ */
+const PLAN_PRESETS = {
+  standard: {
+    label: "Standard — R$ 79/mês · 2 instâncias",
+    plan_name: "Standard",
+    plan_price_cents: 7900,
+    max_instances: 2,
+  },
+  pro: {
+    label: "Pro — R$ 129/mês · 4 instâncias",
+    plan_name: "Pro",
+    plan_price_cents: 12900,
+    max_instances: 4,
+  },
+  custom: {
+    label: "Personalizado (definir depois)",
+    plan_name: null,
+    plan_price_cents: null,
+    max_instances: null,
+  },
+} as const;
+
+type PlanPresetKey = keyof typeof PLAN_PRESETS;
+
 // ---------------------------------------------------------------------------
 // Form component
 // ---------------------------------------------------------------------------
@@ -77,6 +109,7 @@ export function NewTenantForm() {
   const [ownerInterface, setOwnerInterface] = useState(INTERFACE_COMPLETA);
   const [slugLocked, setSlugLocked] = useState(false);
   const [created, setCreated] = useState<CreateTenantResponse["data"] | null>(null);
+  const [planPreset, setPlanPreset] = useState<PlanPresetKey>("standard");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -117,6 +150,16 @@ export function NewTenantForm() {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
+      const preset = PLAN_PRESETS[planPreset];
+      const planSettings =
+        preset.plan_name !== null
+          ? {
+              plan_name: preset.plan_name,
+              plan_price_cents: preset.plan_price_cents,
+              max_instances: preset.max_instances,
+            }
+          : undefined;
+
       const result = await createTenant.mutateAsync({
         display_name: values.display_name,
         slug: values.slug,
@@ -125,6 +168,7 @@ export function NewTenantForm() {
         plan: values.plan,
         owner_email: values.owner_email,
         owner_interface_settings: ownerInterface,
+        ...(planSettings ? { plan_settings: planSettings } : {}),
       });
 
       toast.success(t("Tenant criado com sucesso!"));
@@ -278,9 +322,43 @@ export function NewTenantForm() {
               )}
             </div>
 
-            {/* plan */}
+            {/* plan preset — escolha rápida do que Pastor oferece.
+                "custom" não grava nada agora; Pastor edita no detalhe depois. */}
+            <div className="space-y-2">
+              <Label>{t("Plano sugerido")}</Label>
+              <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label={t("Plano sugerido")}>
+                {(Object.keys(PLAN_PRESETS) as PlanPresetKey[]).map((key) => {
+                  const selected = planPreset === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setPlanPreset(key)}
+                      className={[
+                        "rounded-md border px-3 py-2 text-left text-sm transition-colors",
+                        selected
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-400 dark:bg-emerald-950/30 dark:text-emerald-100"
+                          : "border-border bg-card hover:bg-muted/50",
+                      ].join(" ")}
+                    >
+                      {t(PLAN_PRESETS[key].label)}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  "Preenche o plano, preço e limite de instâncias. Edite depois no detalhe do tenant se precisar.",
+                )}
+              </p>
+            </div>
+
+            {/* plan (legacy) — campo do schema original. Mantido porque a RPC
+                fn_create_tenant_with_owner ainda usa como chave de auditoria. */}
             <div className="space-y-1.5">
-              <Label htmlFor="plan">{t("Plano")}</Label>
+              <Label htmlFor="plan">{t("Plano (legado)")}</Label>
               <Select
                 value={planValue}
                 onValueChange={(v) => setValue("plan", v as "standard" | "pro" | "enterprise")}

@@ -18,6 +18,18 @@ export interface CreateTenantPayload {
   plan?: "standard" | "pro" | "enterprise";
   owner_email: string;
   owner_interface_settings?: InterfaceSettings;
+  /**
+   * Configuração de plano/limite aplicada logo após a criação do tenant.
+   * Vai em `organizations.settings` (jsonb) via PATCH — não exigiu migration.
+   * OPOST do `useCreateTenant` faz POST e PATCH em sequência quando esses
+   * campos estão presentes. Tudo opcional: sem eles, o tenant nasce sem
+   * limite configurado (legado).
+   */
+  plan_settings?: {
+    plan_name?: string;
+    plan_price_cents?: number;
+    max_instances?: number;
+  };
 }
 
 export interface CreateTenantResponse {
@@ -43,17 +55,26 @@ export function useCreateTenant() {
   const intent = useRef<{ fingerprint: string; key: string } | null>(null);
 
   return useMutation({
-    mutationFn: (payload: CreateTenantPayload) => {
+    mutationFn: async (payload: CreateTenantPayload) => {
       const normalized = createTenantSchema.parse(payload);
       normalized.owner_email = normalized.owner_email.toLowerCase();
       const fingerprint = JSON.stringify(normalized);
       if (!intent.current || intent.current.fingerprint !== fingerprint) {
         intent.current = { fingerprint, key: randomId() };
       }
-      // A chave sobrevive ao erro de transporte e ao próximo clique humano.
-      return apiClient.post<CreateTenantResponse>("/api/v1/admin/tenants", normalized, {
-        idempotencyKey: intent.current.key,
-      });
+      // POST: cria o tenant via RPC fn_create_tenant_with_owner (transacional).
+      const created = await apiClient.post<CreateTenantResponse>(
+        "/api/v1/admin/tenants",
+        normalized,
+        { idempotencyKey: intent.current.key },
+      );
+      // PATCH (opcional): aplica plano/limite em organizations.settings. Roda
+      // só se o Pastor preencheu o preset na criação. Falha aqui NÃO desfaz
+      // o tenant — Pastor pode setar depois pelo card "Editar" do detalhe.
+      if (payload.plan_settings && Object.keys(payload.plan_settings).length > 0) {
+        await apiClient.patch(`/api/v1/admin/tenants/${created.data.id}`, payload.plan_settings);
+      }
+      return created;
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin", "tenants"] });
