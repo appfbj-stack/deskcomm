@@ -25,10 +25,44 @@ COPY . .
 # do textkit: `./en-us` não existe, então event-log drain falha. Adiciona entries
 # explícitos para TODAS as locales que o hyphenate conhece, via fs direto do disco
 # (sem patch em runtime que se perde no rebuild).
+#
+# pnpm mantém o hyphenate em dois lugares: `.pnpm/@react-pdf+hyphenate@*/...` (a
+# entry canônica) E `.pnpm/@react-pdf+textkit@*/node_modules/@react-pdf/hyphenate`
+# (symlink resolvido via dependência do textkit). Patch em SÓ um deles deixa o
+# `require` do textkit voltando a falhar — `find` cobre os dois de uma vez.
 RUN set -eux; \
-    HYPH=/app/node_modules/.pnpm/@react-pdf+hyphenate@0.1.0/node_modules/@react-pdf/hyphenate; \
-    node -e "const fs=require('fs');const pkg=JSON.parse(fs.readFileSync(process.argv[1]+'/package.json','utf8'));const files=fs.readdirSync(process.argv[1]).filter(f=>f.endsWith('.aff')||f.endsWith('.dic')||f.endsWith('.json')||/^[a-z]{2}(-[a-z0-9]+)?$/.test(f));const newMap={...pkg.exports};for(const f of files){if(!newMap['./'+f]){newMap['./'+f]=f;}}pkg.exports=newMap;fs.writeFileSync(process.argv[1]+'/package.json',JSON.stringify(pkg,null,2));" "$HYPH"; \
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const root = '/app/node_modules';
+      const targets = [];
+      function walk(dir) {
+        if (!fs.existsSync(dir)) return;
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+          const p = path.join(dir, e.name);
+          if (e.isDirectory()) {
+            if (e.name === 'hyphenate' && p.includes('@react-pdf')) targets.push(p);
+            else walk(p);
+          }
+        }
+      }
+      walk(root);
+      for (const hyph of targets) {
+        const pkgPath = hyph + '/package.json';
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        const files = fs.readdirSync(hyph).filter(f =>
+          f.endsWith('.aff') || f.endsWith('.dic') || f.endsWith('.json')
+          || /^[a-z]{2}(-[a-z0-9]+)?$/.test(f)
+        );
+        const newMap = { ...(pkg.exports || {}) };
+        for (const f of files) if (!newMap['./' + f]) newMap['./' + f] = f;
+        pkg.exports = newMap;
+        fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
+        console.log('patched', hyph, 'added', files.length, 'exports');
+      }
+    "; \
     mkdir -p /app/node_modules/@react-pdf; \
+    HYPH=$(find /app/node_modules -name hyphenate -type d -path '*@react-pdf*' | head -1); \
     ln -sf "$HYPH" /app/node_modules/@react-pdf/hyphenate
 
 # Healthz do worker (bind 0.0.0.0 dentro do container).
