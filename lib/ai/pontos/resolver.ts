@@ -212,7 +212,12 @@ export function decidirBinding(entrada: EntradaDaDecisao): DecisaoDeBinding {
       provider: agente.provider,
       modelId: agente.model,
       credentialId: agente.credentialId,
-      baseUrl: null,
+      // O baseUrl VEM do binding do MESMO ponto, não do agente publicado —
+      // a versão publicada do agente não tem coluna de base_url (a coluna é
+      // de `ai_purpose_bindings`), e sem esta leitura o agente_publicado cai
+      // no endpoint canônico do provider com a chave de outro — 401
+      // `Missing Authentication header`, mesmo defeito do herdado_de_quem_chamou.
+      baseUrl: entrada.binding?.base_url ?? agente.baseUrl ?? null,
       origem: "agente_publicado",
       avisos,
     };
