@@ -28,6 +28,21 @@ export type ProviderRegistry = Record<
 >;
 
 /**
+ * SDK @ai-sdk/openai (>=2) escolhe o endpoint sozinho pelo NOME do modelo:
+ * `provider('meta/...')` ou `provider('o1-...')` → `openai.responses` (Responses API);
+ * `provider.chat('gpt-4o-mini')` → `openai.chat` (Chat Completions).
+ *
+ * NVIDIA integrate.api.nvidia.com SÓ implementa Chat Completions (`/v1/chat/completions`)
+ * — não tem `/v1/responses`. Sem o `.chat()` explícito, TODA chamada com nome `meta/...`
+ * retorna 404 `modelo_inexistente`. Esta função é o ÚNICO lugar onde isso importa;
+ * os call sites em run-model-call.ts recebem um LanguageModel pronto e desconhecem
+ * o dialeto.
+ */
+function modeloComoChat(provider: ReturnType<typeof createOpenAI>, modelId: string): LanguageModel {
+  return (provider as unknown as { chat: (id: string) => LanguageModel }).chat(modelId);
+}
+
+/**
  * Endpoint canônico do provider Anthropic (baseURL default do @ai-sdk/anthropic). NÃO é
  * um knob de política (a allowlist de política é a do egress.ts) — é o destino INTRÍNSECO
  * de ter escolhido o provider anthropic. Se uma org precisar de proxy/baseURL custom, é aqui
@@ -92,8 +107,10 @@ export function createDefaultRegistry(opts?: { allowedHosts?: string[] }): Provi
   return {
     anthropic: (apiKey, modelId) =>
       createAnthropic({ apiKey, fetch: contain(ANTHROPIC_ENDPOINT) })(modelId),
-    openai: (apiKey, modelId) =>
-      createOpenAI({ apiKey, fetch: contain(OPENAI_ENDPOINT) })(modelId),
+    openai: (apiKey, modelId) => {
+      const provider = createOpenAI({ apiKey, fetch: contain(OPENAI_ENDPOINT) });
+      return modeloComoChat(provider, modelId);
+    },
     google: (apiKey, modelId) =>
       createGoogleGenerativeAI({ apiKey, fetch: contain(GOOGLE_ENDPOINT) })(modelId),
     /**
@@ -105,12 +122,13 @@ export function createDefaultRegistry(opts?: { allowedHosts?: string[] }): Provi
      */
     openrouter: (apiKey, modelId, baseUrl) => {
       const endpoint = baseUrl ?? OPENROUTER_ENDPOINT;
-      return createOpenAI({
+      const provider = createOpenAI({
         apiKey,
         baseURL: endpoint,
         headers: cabecalhosDeAtribuicaoOpenRouter(),
         fetch: contain(endpoint),
-      })(modelId);
+      });
+      return modeloComoChat(provider, modelId);
     },
   };
 }
