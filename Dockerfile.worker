@@ -22,18 +22,13 @@ COPY . .
 
 # Patch do @react-pdf/hyphenate (vendor não corrige o `exports` map). O strict export
 # validation do Node 22 (ESM) recusa o wildcard `./.*` e quebra o require interno
-# do textkit: `./en-us` não existe, então event-log drain falha. Adiciona entries
-# explícitos para TODAS as locales que o hyphenate conhece, via fs direto do disco
-# (sem patch em runtime que se perde no rebuild).
-#
-# pnpm mantém o hyphenate em dois lugares: `.pnpm/@react-pdf+hyphenate@*/...` (a
-# entry canônica) E `.pnpm/@react-pdf+textkit@*/node_modules/@react-pdf/hyphenate`
-# (symlink resolvido via dependência do textkit). Patch em SÓ um deles deixa o
-# `require` do textkit voltando a falhar — o script cobre os dois.
-COPY patches/hyphenate-exports.cjs /tmp/hyphenate-exports.cjs
-RUN node /tmp/hyphenate-exports.cjs /app/node_modules && \
-    mkdir -p /app/node_modules/@react-pdf && \
-    HYPH=$(find /app/node_modules -name hyphenate -type d -path '*@react-pdf*' | head -1) && \
+# do textkit: `./en-us` não existe, então event-log drain fica OFF. Adiciona
+# entries explícitos para TODAS as locales (pnpm guarda hyphenate em dois paths
+# — canônico e via textkit — `find -exec` cobre os dois).
+RUN set -eux; \
+    find /app/node_modules -path '*@react-pdf*hyphenate' -name package.json -exec node -e 'const fs=require("fs");const p=process.argv[1];const dir=p.replace("/package.json","");const pkg=JSON.parse(fs.readFileSync(p,"utf8"));const files=fs.readdirSync(dir).filter(f=>f.endsWith(".aff")||f.endsWith(".dic")||f.endsWith(".json")||/^[a-z]{2}(-[a-z0-9]+)?$/.test(f));const m={...(pkg.exports||{})};for(const f of files){if(!m["./"+f])m["./"+f]=f;}pkg.exports=m;fs.writeFileSync(p,JSON.stringify(pkg,null,2));console.log("patched",dir,files.length);' {} \; ; \
+    mkdir -p /app/node_modules/@react-pdf; \
+    HYPH=$(find /app/node_modules -name hyphenate -type d -path '*@react-pdf*' | head -1); \
     ln -sf "$HYPH" /app/node_modules/@react-pdf/hyphenate
 
 # Healthz do worker (bind 0.0.0.0 dentro do container).
