@@ -20,6 +20,17 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# Patch do @react-pdf/hyphenate (vendor não corrige o `exports` map). O strict export
+# validation do Node 22 (ESM) recusa o wildcard `./.*` e quebra o require interno
+# do textkit: `./en-us` não existe, então event-log drain falha. Adiciona entries
+# explícitos para TODAS as locales que o hyphenate conhece, via fs direto do disco
+# (sem patch em runtime que se perde no rebuild).
+RUN set -eux; \
+    HYPH=/app/node_modules/.pnpm/@react-pdf+hyphenate@0.1.0/node_modules/@react-pdf/hyphenate; \
+    node -e "const fs=require('fs');const pkg=JSON.parse(fs.readFileSync(process.argv[1]+'/package.json','utf8'));const files=fs.readdirSync(process.argv[1]).filter(f=>f.endsWith('.aff')||f.endsWith('.dic')||f.endsWith('.json')||/^[a-z]{2}(-[a-z0-9]+)?$/.test(f));const newMap={...pkg.exports};for(const f of files){if(!newMap['./'+f]){newMap['./'+f]=f;}}pkg.exports=newMap;fs.writeFileSync(process.argv[1]+'/package.json',JSON.stringify(pkg,null,2));" "$HYPH"; \
+    mkdir -p /app/node_modules/@react-pdf; \
+    ln -sf "$HYPH" /app/node_modules/@react-pdf/hyphenate
+
 # Healthz do worker (bind 0.0.0.0 dentro do container).
 EXPOSE 8787
 
