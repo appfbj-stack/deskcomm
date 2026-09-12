@@ -1,25 +1,11 @@
-/**
- * Patch do @react-pdf/hyphenate (vendor não corrige o `exports` map).
- *
- * Node 22 com strict export validation recusa o wildcard `./.*` do vendor e
- * quebra o `require` interno do @react-pdf/textkit: `./en-us` não existe,
- * event-log drain fica OFF e o worker perde uma frente de processamento.
- *
- * Solução: adicionar entries EXPLÍCITOS para cada arquivo do pacote (locales
- * + .aff/.dic) no campo `exports` do package.json.
- *
- * pnpm mantém o hyphenate em DOIS lugares:
- *   - .pnpm/@react-pdf+hyphenate@*/node_modules/@react-pdf/hyphenate  (canônico)
- *   - .pnpm/@react-pdf+textkit@*/node_modules/@react-pdf/hyphenate    (symlink)
- *
- * Patch só em um deixa o outro falhando. Este script varre e patcha os dois.
- */
+// patches/hyphenate-exports.cjs
+// Patch do @react-pdf/hyphenate (vendor nao corrige o exports map).
+// Node 22 strict export validation recusa o wildcard ./* e quebra
+// o require interno do textkit: ./en-us nao existe.
 const fs = require('fs');
 const path = require('path');
-
-const root = process.argv[2] ?? '/app/node_modules';
+const root = '/app/node_modules';
 const targets = [];
-
 function walk(dir) {
   if (!fs.existsSync(dir)) return;
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -30,23 +16,20 @@ function walk(dir) {
     }
   }
 }
-
 walk(root);
-
-let patched = 0;
+let n = 0;
 for (const hyph of targets) {
   const pkgPath = hyph + '/package.json';
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-  const files = fs.readdirSync(hyph).filter((f) =>
+  const files = fs.readdirSync(hyph).filter(f =>
     f.endsWith('.aff') || f.endsWith('.dic') || f.endsWith('.json')
     || /^[a-z]{2}(-[a-z0-9]+)?$/.test(f)
   );
-  const newMap = { ...(pkg.exports || {}) };
-  for (const f of files) if (!newMap['./' + f]) newMap['./' + f] = f;
-  pkg.exports = newMap;
+  const m = { ...(pkg.exports || {}) };
+  for (const f of files) if (!m['./' + f]) m['./' + f] = f;
+  pkg.exports = m;
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
-  patched += 1;
-  console.log('patched', hyph, 'exports=' + files.length);
+  console.log('patched', hyph, files.length);
+  n += 1;
 }
-
-console.log('total_patched=' + patched);
+console.log('total=' + n);

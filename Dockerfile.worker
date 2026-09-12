@@ -23,13 +23,12 @@ COPY . .
 # Patch do @react-pdf/hyphenate (vendor não corrige o `exports` map). O strict export
 # validation do Node 22 (ESM) recusa o wildcard `./.*` e quebra o require interno
 # do textkit: `./en-us` não existe, então event-log drain fica OFF. Adiciona
-# entries explícitos para TODAS as locales (pnpm guarda hyphenate em dois paths
-# — canônico e via textkit — `find -exec` cobre os dois).
-RUN set -eux; \
-    find /app/node_modules -path '*@react-pdf*hyphenate' -name package.json -exec node -e 'const fs=require("fs");const p=process.argv[1];const dir=p.replace("/package.json","");const pkg=JSON.parse(fs.readFileSync(p,"utf8"));const files=fs.readdirSync(dir).filter(f=>f.endsWith(".aff")||f.endsWith(".dic")||f.endsWith(".json")||/^[a-z]{2}(-[a-z0-9]+)?$/.test(f));const m={...(pkg.exports||{})};for(const f of files){if(!m["./"+f])m["./"+f]=f;}pkg.exports=m;fs.writeFileSync(p,JSON.stringify(pkg,null,2));console.log("patched",dir,files.length);' {} \; ; \
-    mkdir -p /app/node_modules/@react-pdf; \
-    HYPH=$(find /app/node_modules -name hyphenate -type d -path '*@react-pdf*' | head -1); \
-    ln -sf "$HYPH" /app/node_modules/@react-pdf/hyphenate
+# entries explícitos para TODAS as locales (o `find` recursivo cobre os dois
+# paths que o pnpm guarda — canônico e via textkit).
+COPY patches/hyphenate-exports.cjs /app/patches/hyphenate-exports.cjs
+RUN node /app/patches/hyphenate-exports.cjs && \
+    mkdir -p /app/node_modules/@react-pdf && \
+    ln -sf /app/node_modules/.pnpm/@react-pdf+hyphenate@0.1.0/node_modules/@react-pdf/hyphenate /app/node_modules/@react-pdf/hyphenate
 
 # Healthz do worker (bind 0.0.0.0 dentro do container).
 EXPOSE 8787
