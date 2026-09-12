@@ -71,6 +71,17 @@ export interface AgentePublicado {
   provider: string;
   credentialId: string | null;
   model: string | undefined;
+  /**
+   * Endpoint do agente publicado quando o painel de provedores apontou um
+   * (gateway OpenAI-compatível, ou modelo local). É o que `agent_turn` usa, e
+   * é o que os pontos auxiliares precisam herdar para não cair no endpoint
+   * canônico do provider — por exemplo, com `provider=openrouter` apontando
+   * para a NVIDIA, sem o baseUrl herdado a chamada vai a
+   * `openrouter.ai/api/v1` com a chave da NVIDIA e toma 401
+   * `Missing Authentication header`. Carregado pela binding de `agent_turn`
+   * (que é onde o baseUrl vive — não há coluna na `ai_agent_versions`).
+   */
+  baseUrl?: string | null;
 }
 
 /** O padrão da organização (`organizations.settings.llm`). */
@@ -252,6 +263,15 @@ export function decidirBinding(entrada: EntradaDaDecisao): DecisaoDeBinding {
   // Vem DEPOIS do knob de ambiente de propósito: `aux-model-args.ts` só
   // empresta o modelo do agente quando o knob está vazio, e as duas metades da
   // mesma regra não podem discordar sobre a ordem.
+  //
+  // `baseUrl` também é HERDADO (não é um enfeite): o agente publicado aponta
+  // para o endpoint configurado no painel de provedores via binding de
+  // `agent_turn`. Sem o baseUrl carregado junto, o ponto auxiliar cai no
+  // endpoint canônico do provider — ex.: `provider=openrouter` apontando para
+  // `integrate.api.nvidia.com` via binding, sem baseUrl, ia a
+  // `openrouter.ai/api/v1` com a chave da NVIDIA e tomava 401
+  // `Missing Authentication header`. Carregado em `agentePublicado.baseUrl`
+  // pelo seam (binding-do-ponto.ts carrega a binding de agent_turn junto).
   const modeloDeQuemChamou = entrada.agentePublicado?.model;
   if (entrada.agentePublicado !== null && modeloDeQuemChamou !== undefined) {
     const quemChamou = entrada.agentePublicado;
@@ -259,7 +279,7 @@ export function decidirBinding(entrada: EntradaDaDecisao): DecisaoDeBinding {
       provider: quemChamou.provider,
       modelId: modeloDeQuemChamou,
       credentialId: quemChamou.credentialId,
-      baseUrl: null,
+      baseUrl: quemChamou.baseUrl ?? null,
       origem: "herdado_de_quem_chamou",
       avisos,
     };

@@ -23,7 +23,7 @@ import { z } from 'zod';
 import { scrubMessage } from '@/lib/sentry/scrub';
 
 import type { Logger } from '../../obs/logger';
-import { decidirParaOSeam } from './binding-do-ponto';
+import { carregarBindingDoAgentTurn, decidirParaOSeam } from './binding-do-ponto';
 import { resolveOrgLlmConfig, type LlmEdgeConfig, type OrcamentoDaOrg } from './credentials';
 import {
   AVISO_CORPO,
@@ -320,6 +320,14 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   // só um rótulo de custo e virar decisão. Sem binding configurado, `decisao`
   // reproduz exatamente o comportamento anterior — a origem volta como
   // 'variavel_de_ambiente' ou 'padrao_da_organizacao'.
+  //
+  // `bindingDoAgentTurn` carrega o base_url que o agente publicado está
+  // usando, para que o ponto auxiliar (jailbreak, stage_classifier, etc.)
+  // herde o endpoint configurado em vez de cair no canônico do provider —
+  // ver `binding-do-ponto.ts` para o defeito que isto conserta.
+  const bindingDoAgentTurn = await carregarBindingDoAgentTurn(db, input.tenantId).catch(() => null);
+  const baseUrlHerdado = bindingDoAgentTurn?.base_url ?? null;
+
   const decisao = await decidirParaOSeam(db, {
     organizationId: input.tenantId,
     purpose,
@@ -331,6 +339,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
             provider: input.llmOverride.provider ?? padrao.provider,
             credentialId: input.llmOverride.credentialId ?? null,
             model: input.model,
+            baseUrl: baseUrlHerdado,
           },
     padraoDaOrganizacao: { provider: padrao.provider, defaultModel: padrao.defaultModel },
   }, deps.log ? { log: deps.log } : {});

@@ -41,6 +41,31 @@ export async function carregarBinding(
   return rows[0] ?? null;
 }
 
+/**
+ * Lê a binding do `agent_turn` para a mesma organização. É o que o `agentePublicado`
+ * herda de baseUrl quando o ponto auxiliar cai em `herdado_de_quem_chamou`: a
+ * versão publicada do agente não guarda `base_url` (a coluna está só em
+ * `ai_purpose_bindings`), e sem essa herança a chamada do classificador/jailbreak/
+ * etc. cai no endpoint canônico do provider com a chave de outro — 401.
+ *
+ * Carregamento é barato (idx `ai_purpose_bindings_lookup_idx`) e sempre por
+ * chamada, igual à outra binding. Falha de leitura NÃO derruba o turno:
+ * herança sem baseUrl é o comportamento anterior preservado.
+ */
+export async function carregarBindingDoAgentTurn(
+  db: pg.Pool,
+  organizationId: string,
+): Promise<LinhaDeBinding | null> {
+  const { rows } = await db.query<LinhaDeBinding>(
+    `select purpose, provider, credential_id, model_id, base_url, is_enabled
+       from ai_purpose_bindings
+      where organization_id = $1 and purpose = 'agent_turn' and is_enabled
+      limit 1`,
+    [organizationId],
+  );
+  return rows[0] ?? null;
+}
+
 export interface EntradaDoSeam {
   organizationId: string;
   purpose: string;
