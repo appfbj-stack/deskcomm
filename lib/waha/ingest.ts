@@ -831,6 +831,48 @@ async function handleOutboundFromUserPhone(
   const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
   if (!conversationId) return;
 
+  // ── ECO DO PRÓPRIO ENVIO — rec3ncilia com linha pending ───────────────────────
+  //
+  // O sendMessageHandler grava a linha ANTES de chamar o WAHA: status='queued',
+  // external_id=NULL. O eco chega com fromMe=true antes do UPDATE do handler
+  // atualizar com o bare id. O dedup por external_id (jaRegistrada acima)
+  // perde essa janela — a linha tem external_id=NULL, o eco traz composto.
+  //
+  // Antes (#521): o eco virava "humano digitou" e silenciava a IA por 1h.
+  // Agora (#extensão): achamos a linha pendente (mesma conversa, mesmo corpo,
+  // external_id NULL, status queued/sending) e atualizamos com o external_id
+  // composto + status='sent'. Saímos sem inserir nova linha — sem duplicação.
+  //
+  // Janela: 60s, mesma do `ehEcoDeEnvioNosso`. Quem é 'ai'/'user' é nosso envio;
+  // quem é 'external_device' é o celular — não casa.
+  const desdeEco = new Date(Date.now() - JANELA_DO_ECO_MS).toISOString();
+  const { data: pending } = await admin
+    .from("messages")
+    .select("id")
+    .eq("organization_id", session.organization_id)
+    .eq("conversation_id", conversationId)
+    .eq("direction", "outbound")
+    .in("sent_via", ["ai", "user"])
+    .is("external_id", null)
+    .in("status", ["queued", "sending"])
+    .eq("body", bodyOf(p))
+    .gte("created_at", desdeEco)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (pending) {
+    await admin
+      .from("messages")
+      .update({
+        external_id: p.id,
+        status: "sent",
+        ack: p.ack ?? null,
+      })
+      .eq("id", pending.id);
+    // não pausa IA — é eco do nosso envio
+    return;
+  }
+
   const now = new Date().toISOString();
   const { data: insertedOutbound, error: insertErr } = await admin
     .from("messages")
