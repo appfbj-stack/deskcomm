@@ -36,6 +36,20 @@ export const CHANNEL_CAPABILITIES: Record<ChannelProvider, ChannelCapabilities> 
     groups: "limited",
     costPerMessage: true,
   },
+  // UAZAPI: BSP que envelopa WAHA com transporte próprio. Mesma WABA por baixo,
+  // mesma janela de 24h, mesmo template — só o transporte muda. Por isso o
+  // envelope traduz UAZAPI → WahaEnvelope e reusa o `wahaAdapter` direto: o
+  // comportamento do CANAL (janela, templates, ban) é o do WhatsApp via WAHA.
+  uazapi: {
+    freeformOutsideWindow: true,
+    requiresTemplates: false,
+    canManageTemplates: false,
+    banRisk: true,
+    minIntervalMs: null,
+    voiceNote: "server-convert",
+    groups: "full",
+    costPerMessage: false,
+  },
   // Mesma hetero-restrição do canal oficial, por baixo: é um BSP: a WABA é da
   // Meta, os templates são aprovados pela Meta e a janela de 24h é da Meta. O
   // intermediário muda o TRANSPORTE (quem endereça, como se autentica), não o
@@ -90,6 +104,7 @@ export const DEFAULT_CHANNEL_PROVIDER: ChannelProvider = "waha";
 export const CHANNEL_PROVIDER_WAHA: ChannelProvider = "waha";
 export const CHANNEL_PROVIDER_META: ChannelProvider = "meta_cloud";
 export const CHANNEL_PROVIDER_ZERNIO: ChannelProvider = "zernio";
+export const CHANNEL_PROVIDER_UAZAPI: ChannelProvider = "uazapi";
 
 export function capabilitiesOf(provider: ChannelProvider): ChannelCapabilities {
   const caps = CHANNEL_CAPABILITIES[provider];

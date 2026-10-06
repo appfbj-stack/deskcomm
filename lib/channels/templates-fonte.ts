@@ -42,6 +42,10 @@ const FONTE: Record<ChannelProvider, FonteDeTemplates | null> = {
   waha: null,
   meta_cloud: "oficial",
   zernio: "parceiro",
+  // UAZAPI: mesma janela de 24h via WAHA por baixo. Hoje não temos client/
+  // templates UAZAPI; quando entrar, decidir se é "oficial" (igual Meta) ou
+  // "parceiro" (igual Zernio) baseado em quem aprova as definições.
+  uazapi: null,
 };
 
 /** `null` quando este canal não trabalha com definições aprovadas. */

@@ -11,6 +11,13 @@ const ADAPTERS: Record<ChannelProvider, ChannelAdapter | null> = {
   waha: wahaAdapter,
   meta_cloud: metaCloudAdapter,
   zernio: zernioAdapter,
+  // UAZAPI é o MESMO adapter do WAHA: a única diferença é o TRANSPORTE do webhook
+  // e do envio, e `lib/uazapi/envelope.ts` traduz o webhook UAZAPI para WahaEnvelope.
+  // Para envio, ainda não temos client UAZAPI — usar wahaAdapter resultaria em
+  // enviar pelo WAHA errado; por isso `null` aqui até `lib/channels/adapters/uazapi.ts`
+  // existir. O webhook de ENTRADA funciona porque o envelope alimenta o dispatchWahaEvent,
+  // que NÃO chama `getAdapter` para entrada.
+  uazapi: null,
 };
 
 /**
